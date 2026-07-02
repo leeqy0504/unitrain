@@ -1,0 +1,20 @@
+[project]
+name = "unitrain"
+version = "0.1.0"
+description = "UniTrain - Universal Training Framework for deep learning models"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+unitrain-train = "cli.train:main"
+unitrain-predict = "cli.predict:main"
+unitrain-export = "cli.export:main"
+
+[tool.setuptools.packages.find]
+include = ["unitrain*", "cli*"]
+
+[dependency-groups]
+dev = []

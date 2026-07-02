@@ -1,0 +1,32 @@
+# Virtual environments
+.venv*/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# uv
+uv.lock
+
+# Outputs
+runs/
+outputs/
+
+# Weight files (all stored in weights/)
+*.pt
+*.pth
+*.onnx
+*.engine
+weights/*
+!weights/.gitkeep
+
+# Data (keep structure, ignore actual data)
+data/*
+!data/.gitkeep
+
+# IDE
+.idea/
+.vscode/

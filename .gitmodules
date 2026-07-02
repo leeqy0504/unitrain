@@ -1,0 +1,7 @@
+[submodule "vendors/rf-detr"]
+	path = vendors/rf-detr
+	url = https://github.com/roboflow/rf-detr.git
+
+[submodule "vendors/ultralytics"]
+	path = vendors/ultralytics
+	url = https://github.com/ultralytics/ultralytics.git

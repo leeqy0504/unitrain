@@ -1,0 +1,34 @@
+# RF-DETR dependencies (verified from local rf-detr pyproject.toml)
+# Core dependencies
+cython
+pycocotools
+torch>=1.13.0
+torchvision>=0.14.0
+fairscale
+scipy
+timm
+tqdm
+numpy
+accelerate
+transformers>=4.40,<5.0
+peft
+ninja
+einops
+pandas
+pylabel
+polygraphy
+open_clip_torch
+rf100vl
+pydantic
+supervision
+matplotlib
+roboflow
+
+# Optional: ONNX export
+onnx
+onnxsim
+onnx_graphsurgeon
+onnxruntime
+
+# Optional: metrics logging
+tensorboard>=2.13.0

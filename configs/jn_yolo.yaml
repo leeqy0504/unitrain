@@ -1,0 +1,22 @@
+# JN 数据集 YOLO 分割训练配置
+# 数据集: StandardJNDataset.v8-jnv4.1_nzj.coco-segmentation
+
+framework: ultralytics
+model: yolo11n-seg        # yolo11n-seg | yolo11s-seg | yolo11m-seg | yolo11l-seg | yolo11x-seg
+task: segment
+
+data:
+  path: /home/nanzj/DATA/train/StandardJNDataset.v8-jnv4.1_nzj.coco-segmentation
+  format: coco
+  nc: 80                  # 根据实际类别数修改
+  names: []               # 留空则自动生成
+
+train:
+  epochs: 100
+  imgsz: 640
+  batch: 16
+  device: 0
+  output_dir: outputs/jn_yolo_seg
+
+export:
+  format: onnx

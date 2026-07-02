@@ -1,0 +1,29 @@
+# JN 数据集 RF-DETR 分割训练配置
+# 数据集: StandardJNDataset.v8-jnv4.1_nzj.coco-segmentation
+
+framework: rfdetr
+model: seg-nano           # seg-nano | seg-small | seg-medium | seg-base | seg-large
+task: segment
+
+# 模型分辨率参考 (自动设置):
+#   seg-nano=384, seg-small=512, seg-medium=576, seg-base=560, seg-large=560
+
+data:
+  path: ~/DATA/dataset/jnv4.9/   # COCO 格式, RF-DETR 自动查找 train/valid 子目录
+  format: coco
+
+train:
+  epochs: 100
+  batch: 2
+  grad_accum_steps: 16    # 等效 batch = 2 × 16 = 32
+  lr: 1.0e-4
+  device: "2,3"
+  output_dir: outputs/jn_rfdetr_seg-nano
+
+  # 早停配置
+  early_stopping: true
+  early_stopping_patience: 10
+  early_stopping_min_delta: 0.001
+
+  # 恢复训练 (取消注释使用)
+  # resume: outputs/jn_rfdetr_seg-nano/checkpoint.pth

@@ -1,0 +1,10 @@
+# Ultralytics dependencies
+# YOLO26 requires ultralytics >= 8.3.0
+ultralytics>=8.3.0
+torch>=2.0
+torchvision
+numpy
+pillow
+opencv-python
+supervision
+pycocotools

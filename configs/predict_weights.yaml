@@ -1,0 +1,8 @@
+# RF-DETR Seg 推理配置 - 使用训练好的权重
+framework: rfdetr
+model: seg-nano         # 与训练时一致 (RFDETRSegNano)
+
+predict:
+  threshold: 0.5
+  weights: weights/weights.pt
+  output_dir: outputs/predict_rgb
