@@ -1,0 +1,31 @@
+framework: rfdetr
+model: medium             # nano | small | medium | base | large
+task: detect
+
+data:
+  path: data/test        # COCO 格式数据集根目录
+  format: coco
+  nc: 80
+
+train:
+  epochs: 100
+  batch: 4
+  grad_accum_steps: 4     # 等效 batch = batch × grad_accum_steps
+  lr: 0.0001
+  device: 0               # GPU: 0 (单卡) | "0,1" (多卡) | "cpu"
+  output_dir: outputs
+
+  # 早停 (可选)
+  early_stopping: true
+  early_stopping_patience: 10
+  early_stopping_min_delta: 0.001
+
+  # 恢复训练 (可选, 取消注释使用)
+  # resume: outputs/output_XXXXXXXX_XXXXXX/checkpoint.pth
+
+predict:
+  threshold: 0.5
+  # weights: weights/best.pt  # 自定义权重 (不设置则使用预训练)
+
+export:
+  format: onnx

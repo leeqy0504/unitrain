@@ -196,6 +196,9 @@ create_venv() {
     
     if [ -f "$deps_file" ]; then
         log_info "安装依赖: $deps_file"
+        uv pip install \
+            torch torchvision torchaudio \
+            --index-url https://mirrors.nju.edu.cn/pytorch/whl/cu121
         uv pip install -r "$deps_file"
     fi
     

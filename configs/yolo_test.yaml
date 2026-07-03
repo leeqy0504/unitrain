@@ -1,0 +1,19 @@
+framework: ultralytics
+model: yolo11n            # yolo11n | yolo11s | yolo11m | yolo11l | yolo11x
+task: detect
+
+data:
+  path: data/test        # COCO 格式 (自动转换为 YOLO 格式)
+  format: coco
+  nc: 80
+  names: []               # 留空则自动生成
+
+train:
+  epochs: 100
+  imgsz: 640
+  batch: 16
+  device: 0
+  output_dir: outputs
+
+export:
+  format: onnx

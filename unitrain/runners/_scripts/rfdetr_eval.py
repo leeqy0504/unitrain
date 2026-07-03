@@ -12,6 +12,8 @@ carries ``evalImgs`` – needed for the confidence-sweep F1 curves).
 """
 
 import argparse
+import csv
+import importlib.util
 import json
 import os
 import sys
@@ -303,6 +305,152 @@ def _parse_training_log(log_path: str) -> dict:
 
 
 # ======================================================================
+# New RF-DETR fallback: parse Lightning metrics.csv
+# ======================================================================
+
+def _to_float(value) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _find_metrics_csv(weights_path: str, output_dir: str) -> Path | None:
+    candidates = [
+        Path(weights_path).parent / "metrics.csv",
+        Path(output_dir).parent / "metrics.csv",
+        Path(output_dir) / "metrics.csv",
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+    return None
+
+
+def _parse_metrics_csv(metrics_csv: Path) -> tuple[dict, list[dict], dict]:
+    rows: list[dict] = []
+    with open(metrics_csv, newline="") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+
+    eval_rows = [
+        row for row in rows
+        if _to_float(row.get("val/mAP_50_95")) is not None
+        or _to_float(row.get("val/segm_mAP_50_95")) is not None
+    ]
+    if not eval_rows:
+        return {}, [], {"epochs": []}
+
+    # Prefer the best validation row, not merely the final row. For segmentation
+    # runs RF-DETR checkpoints monitor segm mAP; detection runs monitor bbox mAP.
+    metric_key = "val/segm_mAP_50_95"
+    if all(_to_float(row.get(metric_key)) is None for row in eval_rows):
+        metric_key = "val/mAP_50_95"
+
+    best_row = max(eval_rows, key=lambda row: _to_float(row.get(metric_key)) or float("-inf"))
+
+    overall = {
+        "mAP50_95": _to_float(best_row.get(metric_key)) or 0.0,
+        "mAP50": _to_float(best_row.get("val/segm_mAP_50" if metric_key.startswith("val/segm") else "val/mAP_50")) or 0.0,
+        "mAP75": _to_float(best_row.get("val/mAP_75")) or 0.0,
+        "AR@100": _to_float(best_row.get("val/mAR")) or 0.0,
+        "precision": _to_float(best_row.get("val/precision")) or 0.0,
+        "recall": _to_float(best_row.get("val/recall")) or 0.0,
+        "f1": _to_float(best_row.get("val/F1")) or 0.0,
+    }
+    if _to_float(best_row.get("val/segm_mAP_50_95")) is not None:
+        overall["bbox_mAP50_95"] = _to_float(best_row.get("val/mAP_50_95")) or 0.0
+        overall["bbox_mAP50"] = _to_float(best_row.get("val/mAP_50")) or 0.0
+
+    per_class: list[dict] = []
+    for key, value in best_row.items():
+        if not key.startswith("val/AP/"):
+            continue
+        ap = _to_float(value)
+        if ap is None:
+            continue
+        name = key.split("val/AP/", 1)[1]
+        per_class.append({
+            "name": name,
+            "mAP50_95": ap,
+            "mAP50": ap,
+            "precision": overall["precision"],
+            "recall": overall["recall"],
+            "f1": overall["f1"],
+        })
+
+    epochs = []
+    for row in eval_rows:
+        epoch = _to_float(row.get("epoch"))
+        item = {
+            "epoch": int(epoch) if epoch is not None else len(epochs),
+            "train_loss": _to_float(row.get("train/loss")),
+            "test_loss": _to_float(row.get("val/loss")),
+            "mAP50_95": _to_float(row.get("val/mAP_50_95")),
+            "mAP50": _to_float(row.get("val/mAP_50")),
+            "mask_mAP50_95": _to_float(row.get("val/segm_mAP_50_95")),
+            "mask_mAP50": _to_float(row.get("val/segm_mAP_50")),
+            "ema_mAP50_95": _to_float(row.get("val/ema_mAP_50_95")),
+            "ema_mAP50": _to_float(row.get("val/ema_mAP_50")),
+        }
+        epochs.append({k: v for k, v in item.items() if v is not None})
+
+    return overall, per_class, {"epochs": epochs}
+
+
+def _build_unified_from_metrics_csv(
+    metrics_csv: Path,
+    *,
+    model_cls_name: str,
+    is_seg: bool,
+    weights_path: str,
+) -> dict:
+    overall, per_class, training_log = _parse_metrics_csv(metrics_csv)
+    coco_stats = {}
+    if overall:
+        coco_stats["segm" if is_seg else "bbox"] = {
+            "mAP50_95": overall.get("mAP50_95", 0.0),
+            "mAP50": overall.get("mAP50", 0.0),
+            "mAP75": overall.get("mAP75", 0.0),
+            "AR@100": overall.get("AR@100", 0.0),
+        }
+        if is_seg and "bbox_mAP50_95" in overall:
+            coco_stats["bbox"] = {
+                "mAP50_95": overall.get("bbox_mAP50_95", 0.0),
+                "mAP50": overall.get("bbox_mAP50", 0.0),
+            }
+
+    return {
+        "framework": "rfdetr",
+        "model": model_cls_name,
+        "task": "segment" if is_seg else "detect",
+        "weights": weights_path,
+        "timestamp": datetime.now().isoformat(),
+        "overall": overall,
+        "per_class": per_class,
+        "coco_stats": coco_stats,
+        "curves": {
+            "pr_curve": {},
+            "f1_confidence": {},
+            "mask_f1_confidence": {},
+            "confusion_matrix": [],
+        },
+        "training_log": training_log,
+        "source": str(metrics_csv),
+    }
+
+
+def _write_unified_metrics(unified: dict, output_dir: str) -> Path:
+    metrics_path = Path(output_dir) / "eval_metrics.json"
+    with open(metrics_path, "w") as f:
+        json.dump(unified, f, indent=2, ensure_ascii=False)
+    print(f"[RF-DETR Eval] Metrics saved: {metrics_path}")
+    return metrics_path
+
+
+# ======================================================================
 # Main
 # ======================================================================
 
@@ -354,6 +502,28 @@ def main() -> None:
     # Import RF-DETR and install the evaluate() hook
     # ------------------------------------------------------------------
     import rfdetr
+
+    if importlib.util.find_spec("rfdetr.main") is None:
+        metrics_csv = _find_metrics_csv(weights_path, output_dir)
+        if metrics_csv is None:
+            print(
+                "[RF-DETR Eval] Error: installed RF-DETR has no rfdetr.main "
+                "and no metrics.csv was found next to the weights.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        print(f"[RF-DETR Eval] New RF-DETR layout detected; reading metrics: {metrics_csv}")
+        unified = _build_unified_from_metrics_csv(
+            metrics_csv,
+            model_cls_name=model_cls_name,
+            is_seg=is_seg,
+            weights_path=weights_path,
+        )
+        _write_unified_metrics(unified, output_dir)
+        _print_summary(unified, is_seg)
+        return
+
     _install_eval_hook()
 
     model_cls = getattr(rfdetr, model_cls_name)
@@ -468,10 +638,12 @@ def main() -> None:
         "training_log": training_log,
     }
 
-    metrics_path = Path(output_dir) / "eval_metrics.json"
-    with open(metrics_path, "w") as f:
-        json.dump(unified, f, indent=2, ensure_ascii=False)
-    print(f"[RF-DETR Eval] Metrics saved: {metrics_path}")
+    _write_unified_metrics(unified, output_dir)
+    _print_summary(unified, is_seg)
+
+
+def _print_summary(unified: dict, is_seg: bool) -> None:
+    per_class = unified.get("per_class", [])
 
     # ------------------------------------------------------------------
     # Terminal summary
